@@ -5,6 +5,18 @@ All notable changes to Pictaria Server are documented here. This project follows
 
 ## Unreleased
 
+### Added
+
+- `OPENAI_COMPATIBLE_MAX_TOKENS` sets the output token cap for the generic
+  OpenAI-compatible endpoint (default 8192; `none` disables the cap). Verbose
+  vision models exhausted the previous fixed 2400 cap mid-JSON, which
+  surfaced as truncated "bad JSON from model" failures.
+- `OPENAI_COMPATIBLE_JSON_SCHEMA` sends `response_format: json_schema` with
+  Pictaria's full schema to the generic endpoint, letting servers that
+  enforce it during decoding (llama.cpp, LM Studio) guarantee schema-valid
+  output and bound its size. Off by default; `json_object` remains the
+  portable fallback.
+
 ## 1.3.0 - 2026-09-14
 
 ### Added

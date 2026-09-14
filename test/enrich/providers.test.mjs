@@ -153,7 +153,7 @@ test('OpenAI-compatible provider posts a portable multimodal JSON-object request
   assert.equal(capture.url, 'http://llama-host:8080/v1/chat/completions');
   assert.equal(capture.body.model, 'qwen-vision');
   assert.equal(capture.body.response_format.type, 'json_object');
-  assert.equal(capture.body.max_tokens, 2400);
+  assert.equal(capture.body.max_tokens, 8192);
   assert.equal(capture.body.temperature, 0);
   assert.equal(capture.body.stream, false);
   const promptText = capture.body.messages[1].content[0].text;
@@ -163,6 +163,50 @@ test('OpenAI-compatible provider posts a portable multimodal JSON-object request
   assert.equal(capture.body.messages[1].content[1].type, 'image_url');
   assert.ok(capture.body.messages[1].content[1].image_url.url.startsWith('data:image/jpeg;base64,'));
   assert.equal(capture.options.headers.Authorization, undefined);
+});
+
+test('OpenAI-compatible provider can enforce the schema with response_format json_schema', async () => {
+  const capture = {};
+  const jsonSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['caption'],
+    properties: {
+      caption: { type: 'string', description: 'A one-sentence description of the photo.' },
+    },
+  };
+  const provider = new OpenAiCompatibleProvider({
+    modelName: 'qwen-vision',
+    baseUrl: 'http://llama-host:8080/v1',
+    jsonSchemaResponseFormat: true,
+    fetchImpl: fakeFetch({
+      choices: [{ message: { content: '{"caption":"Lake"}' } }],
+    }, { capture }),
+  });
+
+  // The referee passes its own schema name; enrichment keeps the default.
+  const result = await provider.analyzeImage(image, { ...prompts, jsonSchema, schemaName: 'pictaria_group_referee' });
+
+  assert.deepEqual(result.normalizedOutput, { caption: 'Lake' });
+  assert.deepEqual(capture.body.response_format, {
+    type: 'json_schema',
+    json_schema: { name: 'pictaria_group_referee', strict: true, schema: jsonSchema },
+  });
+  assert.equal(capture.body.max_tokens, 8192);
+  // The schema still rides in the prompt so the model sees field meanings
+  // even when a decoding grammar also constrains the shape.
+  const promptText = capture.body.messages[1].content[0].text;
+  assert.match(promptText, /^user\n\nReturn only one valid JSON object\./);
+  assert.ok(promptText.includes('"required":["caption"]'));
+
+  const defaultName = new OpenAiCompatibleProvider({
+    modelName: 'qwen-vision',
+    baseUrl: 'http://llama-host:8080/v1',
+    jsonSchemaResponseFormat: true,
+    fetchImpl: fakeFetch({ choices: [{ message: { content: '{"caption":"Lake"}' } }] }, { capture }),
+  });
+  await defaultName.analyzeImage(image, { ...prompts, jsonSchema });
+  assert.equal(capture.body.response_format.json_schema.name, 'pictaria_photo_enrichment');
 });
 
 test('OpenAI-compatible provider sends optional bearer auth and prose without response format', async () => {

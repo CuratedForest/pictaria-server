@@ -78,7 +78,14 @@ test('empty Compose values preserve native LM Studio defaults', () => {
 
 test('OpenAI-compatible configuration is explicit and keeps authentication optional', () => {
   const empty = loadConfig({}).providers.openai_compatible;
-  assert.deepEqual(empty, { apiKey: '', modelName: '', baseUrl: '', timeoutMs: 300000 });
+  assert.deepEqual(empty, {
+    apiKey: '',
+    modelName: '',
+    baseUrl: '',
+    timeoutMs: 300000,
+    maxTokens: 8192,
+    jsonSchemaResponseFormat: false,
+  });
 
   const configured = loadConfig({
     OPENAI_COMPATIBLE_BASE_URL: 'llama-host:8080/v1/',
@@ -90,6 +97,8 @@ test('OpenAI-compatible configuration is explicit and keeps authentication optio
     modelName: 'qwen-vision',
     baseUrl: 'http://llama-host:8080/v1',
     timeoutMs: 300000,
+    maxTokens: 8192,
+    jsonSchemaResponseFormat: false,
   });
 });
 
@@ -102,6 +111,31 @@ test('OpenAI-compatible request timeout is operator-tunable with a safe fallback
     loadConfig({ OPENAI_COMPATIBLE_TIMEOUT_MS: 'not-a-number' }).providers.openai_compatible.timeoutMs,
     300000,
   );
+});
+
+test('OpenAI-compatible output token cap is operator-tunable with a safe fallback', () => {
+  assert.equal(
+    loadConfig({ OPENAI_COMPATIBLE_MAX_TOKENS: '4096' }).providers.openai_compatible.maxTokens,
+    4096,
+  );
+  assert.equal(
+    loadConfig({ OPENAI_COMPATIBLE_MAX_TOKENS: 'not-a-number' }).providers.openai_compatible.maxTokens,
+    8192,
+  );
+  assert.equal(loadConfig({}).providers.openai_compatible.maxTokens, 8192);
+  assert.equal(loadConfig({ OPENAI_COMPATIBLE_MAX_TOKENS: 'none' }).providers.openai_compatible.maxTokens, null);
+});
+
+test('OpenAI-compatible json_schema response format is opt-in', () => {
+  assert.equal(
+    loadConfig({ OPENAI_COMPATIBLE_JSON_SCHEMA: 'true' }).providers.openai_compatible.jsonSchemaResponseFormat,
+    true,
+  );
+  assert.equal(
+    loadConfig({ OPENAI_COMPATIBLE_JSON_SCHEMA: 'not-a-bool' }).providers.openai_compatible.jsonSchemaResponseFormat,
+    false,
+  );
+  assert.equal(loadConfig({}).providers.openai_compatible.jsonSchemaResponseFormat, false);
 });
 
 test('inference host context is operator-authored, trimmed, and bounded', () => {

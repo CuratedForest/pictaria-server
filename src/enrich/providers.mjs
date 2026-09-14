@@ -37,7 +37,7 @@ const OPENAI_MAX_OUTPUT_TOKENS = 8192;
 // in an inference identity or its inspectable snapshot.
 export function enrichmentProviderConfiguration(provider) {
   return {
-    adapterContractVersion: 1,
+    adapterContractVersion: 2,
     name: provider.providerName,
     model: provider.modelName,
     endpoint: provider.baseUrl
@@ -45,6 +45,7 @@ export function enrichmentProviderConfiguration(provider) {
       : provider.providerName === 'cloud_openai' ? 'https://api.openai.com/v1' : null,
     temperature: 'temperature' in provider ? provider.temperature : provider.providerName === 'cloud_openai' ? null : 0,
     maxTokens: provider.providerName === 'cloud_openai' ? OPENAI_MAX_OUTPUT_TOKENS : provider.maxTokens ?? null,
+    jsonSchemaResponseFormat: provider.jsonSchemaResponseFormat === true,
     retryValidationOnce: provider.providerName?.startsWith('local_') || provider.retryValidationOnce === true,
     ...(provider.providerName === 'venice' ? {
       includeVeniceSystemPrompt: false,
@@ -355,7 +356,16 @@ export class OpenAiCompatibleProvider {
     baseUrl,
     apiKey = '',
     timeoutMs = 300000,
-    maxTokens = 2400,
+    // Generous cap, matching the cloud OpenAI budget: a verbose vision model
+    // enumerating the tag taxonomy with reasons exhausted the old fixed 2400
+    // cap mid-JSON (finish_reason=length), which surfaced as "bad JSON from
+    // model" failures. This is a ceiling, not a target — generation still
+    // stops when the model finishes.
+    maxTokens = 8192,
+    // response_format json_schema lets a supporting server (llama.cpp, LM
+    // Studio) enforce Pictaria's schema during decoding. Off by default:
+    // generic OpenAI-compatible servers are not guaranteed to accept it.
+    jsonSchemaResponseFormat = false,
     fetchImpl = fetch,
   } = {}) {
     if (!baseUrl) {
@@ -369,6 +379,7 @@ export class OpenAiCompatibleProvider {
     this.apiKey = apiKey;
     this.timeoutMs = timeoutMs;
     this.maxTokens = maxTokens;
+    this.jsonSchemaResponseFormat = jsonSchemaResponseFormat;
     this.fetchImpl = fetchImpl;
   }
 
@@ -376,11 +387,17 @@ export class OpenAiCompatibleProvider {
     return this.analyzeImages([image], options);
   }
 
-  async analyzeImages(images, { systemPrompt, userPrompt, jsonSchema, signal = null }) {
-    // JSON-object mode constrains only the outer syntax. Unlike a strict
-    // json_schema request, it does not tell the model which fields Pictaria
-    // requires, so include the deterministic schema text in the prompt and
-    // keep the existing full local validation as the acceptance boundary.
+  async analyzeImages(images, {
+    systemPrompt,
+    userPrompt,
+    jsonSchema,
+    schemaName = 'pictaria_photo_enrichment',
+    signal = null,
+  }) {
+    // The schema always rides in the prompt, in both response_format modes:
+    // a grammar constrains the shape of the output but is not how the model
+    // sees each field's meaning, so the deterministic schema text stays and
+    // the full local validation remains the acceptance boundary.
     const schemaText = JSON.stringify(sortKeysDeep(jsonSchema));
     const schemaAwareUserPrompt =
       `${userPrompt}\n\n` +
@@ -403,10 +420,24 @@ export class OpenAiCompatibleProvider {
         },
       ],
       // JSON-object mode is the common denominator across OpenAI-compatible
-      // servers. The prompt above communicates the fields, and Pictaria still
-      // applies its complete schema locally before accepting a result; do not
-      // assume OpenAI's nested strict-schema dialect is portable everywhere.
-      response_format: { type: 'json_object' },
+      // servers: do not assume OpenAI's nested strict-schema dialect is
+      // portable everywhere. It constrains only the outer syntax, so schema
+      // limits like maxItems are advice the model may ignore, and a
+      // generation that runs to max_tokens still truncates mid-JSON.
+      // Servers that implement response_format json_schema (llama.cpp, LM
+      // Studio) enforce the complete schema during decoding instead; opt in
+      // with jsonSchemaResponseFormat once the endpoint is known to support
+      // it. Pictaria applies its complete schema locally either way.
+      response_format: this.jsonSchemaResponseFormat
+        ? {
+          type: 'json_schema',
+          json_schema: {
+            name: schemaName,
+            strict: true,
+            schema: jsonSchema,
+          },
+        }
+        : { type: 'json_object' },
       temperature: 0,
       stream: false,
       max_tokens: this.maxTokens,

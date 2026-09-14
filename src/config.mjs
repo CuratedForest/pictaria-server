@@ -225,6 +225,15 @@ export function loadConfig(env = process.env) {
         modelName: env.OPENAI_COMPATIBLE_MODEL || '',
         baseUrl: normalizeHttpUrl(env.OPENAI_COMPATIBLE_BASE_URL || ''),
         timeoutMs: parseInteger(env.OPENAI_COMPATIBLE_TIMEOUT_MS, 300000),
+        // Verbose vision models (a Qwen3-VL enumerating the whole tag
+        // taxonomy with reasons) exhausted the adapter's old fixed 2400 cap
+        // mid-JSON — finish_reason=length, reported as "bad JSON" failures.
+        // `none` disables the cap.
+        maxTokens: parseOptionalInteger(env.OPENAI_COMPATIBLE_MAX_TOKENS, 8192),
+        // Opt in to response_format json_schema for servers that enforce it
+        // during decoding (llama.cpp, LM Studio). Off by default: generic
+        // OpenAI-compatible servers are not guaranteed to accept the dialect.
+        jsonSchemaResponseFormat: parseBoolean(env.OPENAI_COMPATIBLE_JSON_SCHEMA),
       },
       local_ollama: {
         // Optional: local Ollama needs no auth; set only behind a proxy.
