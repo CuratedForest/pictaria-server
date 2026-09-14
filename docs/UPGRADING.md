@@ -31,7 +31,7 @@ Pictaria backups do not include Immich's data.
 ## Upgrade — Docker
 
 ```sh
-PICTARIA_RELEASE=v1.3.0 # replace with the release you are installing
+PICTARIA_RELEASE=v1.4.0 # replace with the release you are installing
 curl -fsSL -o docker-compose.release.yml \
   "https://raw.githubusercontent.com/pictaria-ai/pictaria-server/${PICTARIA_RELEASE}/docker-compose.yml"
 diff -u docker-compose.yml docker-compose.release.yml
@@ -52,7 +52,7 @@ docker compose -f docker-compose.release.yml config --images
 ```
 
 The printed image must end in the numeric image version corresponding to the
-source release you selected (`v1.3.0` uses image tag `1.3.0`). Next, make a
+source release you selected (`v1.4.0` uses image tag `1.4.0`). Next, make a
 rollback definition from the currently running Compose file. It should already
 resolve to the version you noted under Settings → Server; verify it before
 replacing the active definition:
@@ -79,7 +79,7 @@ test -z "$(git status --porcelain)" || {
   echo "Stop: preserve or reconcile local changes before upgrading."
   exit 1
 }
-PICTARIA_RELEASE=v1.3.0 # replace with the release you are installing
+PICTARIA_RELEASE=v1.4.0 # replace with the release you are installing
 git fetch --tags --prune
 git switch --detach "$PICTARIA_RELEASE"
 docker compose up -d --build
@@ -104,7 +104,7 @@ test -z "$(git status --porcelain)" || {
   echo "Stop: preserve or reconcile local changes before upgrading."
   exit 1
 }
-PICTARIA_RELEASE=v1.3.0 # replace with the release you are installing
+PICTARIA_RELEASE=v1.4.0 # replace with the release you are installing
 git fetch --tags --prune
 git switch --detach "$PICTARIA_RELEASE"
 ```
@@ -265,6 +265,26 @@ pre-flight checklist — see
 
 Do not upgrade both on the same day. If something breaks afterwards, you want
 to know which upgrade caused it.
+
+## Upgrading to v1.4.0
+
+v1.4.0 adds `OPENAI_COMPATIBLE_MAX_TOKENS` (output token cap, default 8192;
+`none` disables it) and `OPENAI_COMPATIBLE_JSON_SCHEMA` (send
+`response_format: json_schema` so a supporting server such as llama.cpp
+enforces Pictaria's schema while decoding) for the generic OpenAI-compatible
+endpoint. Verbose vision models could exhaust the previous fixed 2400 cap
+mid-JSON, which showed up as truncated "bad JSON from model" failures. It
+does not require upgrading Immich or Pictaria Frame.
+
+From **v1.3.0**, this is a code-only update: **persistent-state contract 15,
+Enrich schema 12, and settings version 7 remain unchanged**. Create a complete
+backup, then install the matching v1.4.0 source or container image. If needed,
+stop the server and return to v1.3.0 without restoring data, provided no other
+migration occurred.
+
+Older installations can upgrade directly to v1.4.0; they still perform the
+[v1.2 data migrations](#upgrading-to-v120), and rollback to pre-v1.2 versions
+requires the complete pre-migration snapshot.
 
 ## Upgrading to v1.3.0
 

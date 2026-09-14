@@ -5,6 +5,8 @@ All notable changes to Pictaria Server are documented here. This project follows
 
 ## Unreleased
 
+## 1.4.0 - 2026-09-14
+
 ### Added
 
 - `OPENAI_COMPATIBLE_MAX_TOKENS` sets the output token cap for the generic
