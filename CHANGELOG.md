@@ -5,6 +5,12 @@ All notable changes to Pictaria Server are documented here. This project follows
 
 ## Unreleased
 
+### Added
+
+- `OPENAI_COMPATIBLE_TIMEOUT_MS` raises the per-request timeout for the
+  generic OpenAI-compatible endpoint (default 300000 ms), for slow local
+  vision models that need longer than five minutes per photo.
+
 ## 1.2.1 - 2026-09-12
 
 This patch improves Smart Album compatibility with older Immich versions and

@@ -224,6 +224,7 @@ export function loadConfig(env = process.env) {
         apiKey: env.OPENAI_COMPATIBLE_API_KEY || '',
         modelName: env.OPENAI_COMPATIBLE_MODEL || '',
         baseUrl: normalizeHttpUrl(env.OPENAI_COMPATIBLE_BASE_URL || ''),
+        timeoutMs: parseInteger(env.OPENAI_COMPATIBLE_TIMEOUT_MS, 300000),
       },
       local_ollama: {
         // Optional: local Ollama needs no auth; set only behind a proxy.

@@ -78,7 +78,7 @@ test('empty Compose values preserve native LM Studio defaults', () => {
 
 test('OpenAI-compatible configuration is explicit and keeps authentication optional', () => {
   const empty = loadConfig({}).providers.openai_compatible;
-  assert.deepEqual(empty, { apiKey: '', modelName: '', baseUrl: '' });
+  assert.deepEqual(empty, { apiKey: '', modelName: '', baseUrl: '', timeoutMs: 300000 });
 
   const configured = loadConfig({
     OPENAI_COMPATIBLE_BASE_URL: 'llama-host:8080/v1/',
@@ -89,7 +89,19 @@ test('OpenAI-compatible configuration is explicit and keeps authentication optio
     apiKey: 'proxy-token',
     modelName: 'qwen-vision',
     baseUrl: 'http://llama-host:8080/v1',
+    timeoutMs: 300000,
   });
+});
+
+test('OpenAI-compatible request timeout is operator-tunable with a safe fallback', () => {
+  assert.equal(
+    loadConfig({ OPENAI_COMPATIBLE_TIMEOUT_MS: '7200000' }).providers.openai_compatible.timeoutMs,
+    7200000,
+  );
+  assert.equal(
+    loadConfig({ OPENAI_COMPATIBLE_TIMEOUT_MS: 'not-a-number' }).providers.openai_compatible.timeoutMs,
+    300000,
+  );
 });
 
 test('inference host context is operator-authored, trimmed, and bounded', () => {
