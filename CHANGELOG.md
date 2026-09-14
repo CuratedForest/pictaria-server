@@ -5,6 +5,8 @@ All notable changes to Pictaria Server are documented here. This project follows
 
 ## Unreleased
 
+## 1.4.1 - 2026-09-14
+
 ### Fixed
 
 - `response_format: json_schema` no longer fails on llama.cpp-based servers
