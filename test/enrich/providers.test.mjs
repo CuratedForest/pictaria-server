@@ -17,6 +17,7 @@ import {
   extractSchemaConstrainedChoiceContent,
   lmStudioSupportedImage,
   parseRetryAfterMs,
+  GRAMMAR_SAFE_MAX_LENGTH,
 } from '../../src/enrich/providers.mjs';
 
 function fakeFetch(responseBody, { status = 200, headers = {}, capture = {} } = {}) {
@@ -207,6 +208,65 @@ test('OpenAI-compatible provider can enforce the schema with response_format jso
   });
   await defaultName.analyzeImage(image, { ...prompts, jsonSchema });
   assert.equal(capture.body.response_format.json_schema.name, 'pictaria_photo_enrichment');
+});
+
+test('json_schema is projected within the llama.cpp grammar repetition threshold', async () => {
+  const capture = {};
+  // The enrichment schema's 4096-byte caption limit compiles to a char{0,4096}
+  // repetition, which llama.cpp's grammar parser rejects at its 2000 threshold.
+  // The projection must cap oversized maxLength values while leaving smaller
+  // ones (and every other keyword) untouched.
+  const jsonSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['caption', 'short_caption', 'candidate_tags'],
+    properties: {
+      caption: { type: 'string', maxLength: 4096, description: 'Long caption.' },
+      short_caption: { type: 'string', maxLength: 512 },
+      candidate_tags: {
+        type: 'array',
+        maxItems: 50,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['tag', 'reason'],
+          properties: {
+            tag: { type: 'string', enum: ['ai/subject/dog', 'ai/subject/cat'] },
+            reason: { type: 'string', maxLength: 1024 },
+          },
+        },
+      },
+    },
+  };
+  const provider = new OpenAiCompatibleProvider({
+    modelName: 'qwen-vision',
+    baseUrl: 'http://llama-host:8080/v1',
+    jsonSchemaResponseFormat: true,
+    fetchImpl: fakeFetch({ choices: [{ message: { content: '{"caption":"x","short_caption":"y","candidate_tags":[]}' } }] }, { capture }),
+  });
+
+  await provider.analyzeImage(image, { ...prompts, jsonSchema });
+
+  const sent = capture.body.response_format.json_schema.schema;
+  assert.equal(sent.properties.caption.maxLength, GRAMMAR_SAFE_MAX_LENGTH);
+  assert.equal(sent.properties.caption.description, 'Long caption.');
+  // Under-cap lengths and non-length keywords pass through unchanged.
+  assert.equal(sent.properties.short_caption.maxLength, 512);
+  assert.equal(sent.properties.candidate_tags.maxItems, 50);
+  assert.equal(sent.properties.candidate_tags.items.properties.reason.maxLength, 1024);
+  assert.deepEqual(sent.properties.candidate_tags.items.properties.tag.enum, ['ai/subject/dog', 'ai/subject/cat']);
+  // The prompt still embeds the FULL schema so the model sees the real limit.
+  const promptText = capture.body.messages[1].content[0].text;
+  assert.ok(promptText.includes('"maxLength":4096'));
+
+  // LM Studio shares the llama.cpp grammar engine, so it projects too.
+  const lmCapture = {};
+  const lmStudio = new LmStudioProvider({
+    modelName: 'qwen3.5-4b-mlx',
+    fetchImpl: fakeFetch({ choices: [{ message: { content: '{"caption":"x","short_caption":"y","candidate_tags":[]}' } }] }, { capture: lmCapture }),
+  });
+  await lmStudio.analyzeImage(image, { ...prompts, jsonSchema });
+  assert.equal(lmCapture.body.response_format.json_schema.schema.properties.caption.maxLength, GRAMMAR_SAFE_MAX_LENGTH);
 });
 
 test('OpenAI-compatible provider sends optional bearer auth and prose without response format', async () => {

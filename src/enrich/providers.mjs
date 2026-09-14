@@ -297,7 +297,10 @@ export class LmStudioProvider {
         json_schema: {
           name: schemaName,
           strict: true,
-          schema: jsonSchema,
+          // LM Studio is llama.cpp-based: project the schema so its length
+          // limits stay within the grammar compiler's repetition threshold
+          // (see projectGrammarSafeJsonSchema).
+          schema: projectGrammarSafeJsonSchema(jsonSchema),
         },
       },
       temperature: this.temperature,
@@ -427,14 +430,17 @@ export class OpenAiCompatibleProvider {
       // Servers that implement response_format json_schema (llama.cpp, LM
       // Studio) enforce the complete schema during decoding instead; opt in
       // with jsonSchemaResponseFormat once the endpoint is known to support
-      // it. Pictaria applies its complete schema locally either way.
+      // it. The schema is projected so its length limits stay within what
+      // llama.cpp's grammar compiler accepts (see
+      // projectGrammarSafeJsonSchema); Pictaria applies its complete schema
+      // locally either way.
       response_format: this.jsonSchemaResponseFormat
         ? {
           type: 'json_schema',
           json_schema: {
             name: schemaName,
             strict: true,
-            schema: jsonSchema,
+            schema: projectGrammarSafeJsonSchema(jsonSchema),
           },
         }
         : { type: 'json_object' },
@@ -603,6 +609,35 @@ function projectGeminiJsonSchema(value, context = 'schema') {
       .filter(([key]) => GEMINI_JSON_SCHEMA_KEYWORDS.has(key))
       .map(([key, child]) => [key, projectGeminiJsonSchema(child, key)]),
   );
+}
+
+// llama.cpp — and llama.cpp-based servers such as LM Studio — compile a
+// response_format json_schema into a GBNF grammar before decoding. A string's
+// maxLength becomes a `char{0,N}` repetition, and llama.cpp's grammar parser
+// rejects repetitions at its internal MAX_REPETITION_THRESHOLD (2000): the
+// enrichment schema's 4096-byte caption limit failed sampler initialization
+// with "failed to parse grammar" (HTTP 400). Cap maxLength safely under that
+// threshold before handing the schema to the grammar. Only the grammar's
+// length cap is relaxed — the prompt still embeds the full schema and
+// Pictaria's local validation enforces the true byte limits on the result.
+// Structure, enums, required, additionalProperties and maxItems all compile
+// fine and are left untouched.
+export const GRAMMAR_SAFE_MAX_LENGTH = 1500;
+
+function projectGrammarSafeJsonSchema(value) {
+  if (Array.isArray(value)) {
+    return value.map(projectGrammarSafeJsonSchema);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const projected = Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [key, projectGrammarSafeJsonSchema(child)]),
+  );
+  if (typeof projected.maxLength === 'number' && projected.maxLength > GRAMMAR_SAFE_MAX_LENGTH) {
+    projected.maxLength = GRAMMAR_SAFE_MAX_LENGTH;
+  }
+  return projected;
 }
 
 function openRouterEmptyContentDiagnostic(response, apiKey) {

@@ -5,6 +5,17 @@ All notable changes to Pictaria Server are documented here. This project follows
 
 ## Unreleased
 
+### Fixed
+
+- `response_format: json_schema` no longer fails on llama.cpp-based servers
+  (the generic OpenAI-compatible endpoint, LM Studio) with HTTP 400 "failed to
+  parse grammar". llama.cpp compiles the schema to a grammar and rejects a
+  string `maxLength` at or above its 2000-repetition threshold; the enrichment
+  schema's 4096-byte caption limit tripped it. Oversized `maxLength` values are
+  now projected below that limit before the schema is sent (smaller limits,
+  `maxItems`, enums, and structure are untouched). The prompt still embeds the
+  full schema and local validation still enforces the true byte limits.
+
 ## 1.4.0 - 2026-09-14
 
 ### Added
