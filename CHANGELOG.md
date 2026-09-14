@@ -5,6 +5,8 @@ All notable changes to Pictaria Server are documented here. This project follows
 
 ## Unreleased
 
+## 1.3.0 - 2026-09-14
+
 ### Added
 
 - `OPENAI_COMPATIBLE_TIMEOUT_MS` raises the per-request timeout for the
