@@ -21,3 +21,5 @@ id_ed25519
 *.db-*
 .DS_Store
 .gstack/
+.agents/skills/
+.agents/worktrees/
