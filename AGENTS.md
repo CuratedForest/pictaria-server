@@ -19,8 +19,10 @@ and zero npm dependencies. See `README.md` for the product overview.
   (date prefix, **never** a unix epoch; `<type>` = `feat`|`bug`|`debug`|`dep`|…).
 - `.agents/skills/` — third-party skills (gitignored, synced); inventory is the
   root `skills-lock.json`.
-- `.kilo`, `.opencode` — tracked symlinks to `.agents/`, so kilo and
-  opencode load the same agents, plans, and skills.
+- `.kilo` — tracked symlink to `.agents/`, so kilo loads the same agents,
+  plans, and skills.
+- `.opencode/` — real tracked dir: `agents` and `skills` symlink back into
+  `.agents/`; opencode-only content lives here (`plugin/`, `opencode.json`).
 
 ## Agents
 
